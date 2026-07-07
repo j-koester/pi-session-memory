@@ -15,7 +15,7 @@
 
 import { complete } from "@earendil-works/pi-ai/compat";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { statSync, existsSync, unlinkSync } from "node:fs";
+import { statSync, existsSync } from "node:fs";
 import { basename, join } from "node:path";
 import { Type } from "typebox";
 
@@ -113,7 +113,13 @@ export default function (pi: ExtensionAPI) {
 		const c = targetCache || cache;
 		if (!c) return null;
 		const fn = basename(file);
-		const size = existsSync(file) ? statSync(file).size : 0;
+
+		let size: number;
+		try {
+			size = statSync(file).size;
+		} catch {
+			return null; // file deleted or inaccessible
+		}
 
 		// Return cached if file hasn't changed
 		if (c.sessions[fn] && c.sessions[fn].fileSize === size) {
@@ -172,11 +178,16 @@ export default function (pi: ExtensionAPI) {
 			},
 		);
 
-		return response.content
+		// Don't cache aborted or empty responses
+		if (response.stopReason === "aborted") return null;
+
+		const text = response.content
 			.filter((c): c is { type: "text"; text: string } => c.type === "text")
 			.map((c) => c.text)
 			.join("\n")
 			.trim();
+
+		return text || null;
 	}
 
 	// ── session_start: load cache ──
@@ -523,7 +534,17 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			const files = excludeCurrent(getSessionFiles());
-			const argLimit = args.trim() ? parseInt(args.trim(), 10) : undefined;
+			const argRaw = args.trim();
+			const argLimit = argRaw ? parseInt(argRaw, 10) : undefined;
+
+			if (argLimit !== undefined && isNaN(argLimit)) {
+				if (ctx.hasUI)
+					ctx.ui.notify(
+						`Invalid limit: "${argRaw}". Usage: /memory-update [number]`,
+						"error",
+					);
+				return;
+			}
 
 			// Find sessions needing summaries
 			const toProcess: string[] = [];

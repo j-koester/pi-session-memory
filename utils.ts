@@ -248,23 +248,26 @@ export function searchSessions(
 						role = "compaction-summary";
 					}
 
-					if (text && text.toLowerCase().includes(q)) {
-						const idx = text.toLowerCase().indexOf(q);
-						const start = Math.max(0, idx - 150);
-						const end = Math.min(
-							text.length,
-							idx + query.length + 150,
-						);
-						const snippet =
-							(start > 0 ? "…" : "") +
-							text.slice(start, end) +
-							(end < text.length ? "…" : "");
+					if (text) {
+						const textLower = text.toLowerCase();
+						const idx = textLower.indexOf(q);
+						if (idx !== -1) {
+							const start = Math.max(0, idx - 150);
+							const end = Math.min(
+								text.length,
+								idx + query.length + 150,
+							);
+							const snippet =
+								(start > 0 ? "…" : "") +
+								text.slice(start, end) +
+								(end < text.length ? "…" : "");
 
-						matches.push({
-							role,
-							snippet,
-							timestamp: e.timestamp || "",
-						});
+							matches.push({
+								role,
+								snippet,
+								timestamp: e.timestamp || "",
+							});
+						}
 					}
 				} catch {
 					/* skip */
@@ -314,7 +317,7 @@ export function loadCache(cwd: string): MemoryCache {
 	};
 }
 
-/** Persist the memory cache to disk. */
+/** Persist the memory cache to disk. Also updates `cache.updatedAt` in place. */
 export function saveCache(cache: MemoryCache): void {
 	mkdirSync(MEMORY_DIR, { recursive: true });
 	cache.updatedAt = new Date().toISOString();
