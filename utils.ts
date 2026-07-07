@@ -1,9 +1,3 @@
-/**
- * Session Memory – Utilities
- *
- * Pure functions for session parsing, caching, searching, and memory compilation.
- */
-
 import {
 	readFileSync,
 	writeFileSync,
@@ -13,8 +7,6 @@ import {
 } from "node:fs";
 import { join, basename, dirname } from "node:path";
 import { createHash } from "node:crypto";
-
-// ─── Types ───────────────────────────────────────────────────────────────────
 
 export interface SessionInfo {
 	file: string;
@@ -54,17 +46,12 @@ export interface SearchResult {
 	matches: SearchMatch[];
 }
 
-// ─── Constants ───────────────────────────────────────────────────────────────
-
 const CONFIG_BASE =
 	process.env.PI_CODING_AGENT_DIR ||
 	join(process.env.HOME || "", ".pi", "agent");
 
 const MEMORY_DIR = join(CONFIG_BASE, "session-memory");
 
-// ─── Text Extraction ─────────────────────────────────────────────────────────
-
-/** Extract plain text from a message content field (string or content block array). */
 export function extractText(content: unknown): string {
 	if (typeof content === "string") return content;
 	if (!Array.isArray(content)) return "";
@@ -76,8 +63,6 @@ export function extractText(content: unknown): string {
 		.join("\n")
 		.trim();
 }
-
-// ─── Session Directory Resolution ────────────────────────────────────────────
 
 /**
  * Resolve the session storage directory for a given cwd.
@@ -97,7 +82,6 @@ export function resolveSessionDir(
 	return existsSync(dir) ? dir : null;
 }
 
-/** List all .jsonl session files in a directory, newest first. */
 export function listSessionFiles(dir: string): string[] {
 	try {
 		return readdirSync(dir)
@@ -110,9 +94,6 @@ export function listSessionFiles(dir: string): string[] {
 	}
 }
 
-// ─── Session Parsing ─────────────────────────────────────────────────────────
-
-/** Scan a session file and extract metadata (name, first message, message count). */
 export function scanSession(file: string): SessionInfo | null {
 	try {
 		const raw = readFileSync(file, "utf-8");
@@ -155,10 +136,7 @@ export function scanSession(file: string): SessionInfo | null {
 	}
 }
 
-/**
- * Build a readable conversation transcript from a session file.
- * Used as input for LLM-based summary generation.
- */
+/** Build a readable conversation transcript for LLM summarization. */
 export function buildConversation(
 	file: string,
 	maxChars = 120_000,
@@ -203,12 +181,6 @@ export function buildConversation(
 	return full;
 }
 
-// ─── Search ──────────────────────────────────────────────────────────────────
-
-/**
- * Search through session files for a text query.
- * Returns matching messages with surrounding context snippets.
- */
 export function searchSessions(
 	files: string[],
 	query: string,
@@ -290,14 +262,11 @@ export function searchSessions(
 	return results;
 }
 
-// ─── Cache ───────────────────────────────────────────────────────────────────
-
 function cachePath(cwd: string): string {
 	const hash = createHash("md5").update(cwd).digest("hex").slice(0, 16);
 	return join(MEMORY_DIR, `${hash}.json`);
 }
 
-/** Load the memory cache for a cwd. Returns empty cache if none exists. */
 export function loadCache(cwd: string): MemoryCache {
 	const p = cachePath(cwd);
 	if (existsSync(p)) {
@@ -316,19 +285,13 @@ export function loadCache(cwd: string): MemoryCache {
 	};
 }
 
-/** Persist the memory cache to disk. Also updates `cache.updatedAt` in place. */
 export function saveCache(cache: MemoryCache): void {
 	mkdirSync(MEMORY_DIR, { recursive: true });
 	cache.updatedAt = new Date().toISOString();
 	writeFileSync(cachePath(cache.cwd), JSON.stringify(cache, null, 2));
 }
 
-// ─── Project Memory Compilation ──────────────────────────────────────────────
-
-/**
- * Build the project memory text from cached session summaries.
- * This is purely programmatic – no LLM call needed.
- */
+/** Compile project memory from cached summaries (no LLM call). */
 export function buildProjectMemory(
 	cache: MemoryCache,
 	maxSessions = 15,

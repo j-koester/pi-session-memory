@@ -1,20 +1,3 @@
-/**
- * Session Memory Extension
- *
- * Gives pi access to knowledge from previous sessions in the current working directory.
- *
- * Features:
- * - Auto-injects a compact project memory on the first prompt of each session
- * - Auto-summarizes outgoing sessions on shutdown
- * - Stale cache detection with user warnings
- * - `list_sessions` tool – browse past sessions with metadata
- * - `search_sessions` tool – full-text search across all past sessions
- * - `get_session_summary` tool – detailed LLM-generated summary (cached)
- * - `/memory-update` command – batch-generate summaries (Esc to cancel)
- * - `/memory-status` command – show cache statistics
- * - `/memory-clear` command – reset the cache
- */
-
 import { complete } from "@earendil-works/pi-ai/compat";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { BorderedLoader } from "@earendil-works/pi-coding-agent";
@@ -35,8 +18,6 @@ import {
 	type MemoryCache,
 } from "./utils";
 
-// ─── Summary generation prompt ───────────────────────────────────────────────
-
 const SUMMARY_PROMPT = `Summarize this pi coding agent session concisely (max 200 words). Structure as:
 
 - **Goal**: What the user wanted to achieve
@@ -48,19 +29,17 @@ const SUMMARY_PROMPT = `Summarize this pi coding agent session concisely (max 20
 {CONVERSATION}
 </session>`;
 
-// ─── Types & Constants ───────────────────────────────────────────────────────
-
-/** Minimal model reference used throughout the extension. */
 interface ModelRef {
 	provider: string;
 	id: string;
 }
 
-/** Context subset needed for LLM summary generation. */
 interface SummaryContext {
 	model: (ModelRef & Record<string, unknown>) | null | undefined;
 	modelRegistry: {
-		getApiKeyAndHeaders(model: ModelRef & Record<string, unknown>): Promise<{
+		getApiKeyAndHeaders(
+			model: ModelRef & Record<string, unknown>,
+		): Promise<{
 			ok: boolean;
 			apiKey?: string;
 			headers?: Record<string, string>;
@@ -70,7 +49,6 @@ interface SummaryContext {
 	};
 }
 
-/** Entry returned by the list_sessions tool. */
 interface SessionListEntry {
 	fileName: string;
 	date: string;
@@ -80,36 +58,26 @@ interface SessionListEntry {
 	hasSummary: boolean;
 }
 
-/** How many days before project memory is considered stale. */
 const STALE_DAYS = 7;
-
-/** Minimum messages for a session to be auto-summarized on shutdown. */
 const AUTO_SUMMARY_MIN_MESSAGES = 4;
-
-/** Maximum session file size (bytes) for auto-summary on shutdown. */
-const AUTO_SUMMARY_MAX_SIZE = 512_000;
-
-/** Timeout (ms) for auto-summary during shutdown to avoid blocking exit. */
+const AUTO_SUMMARY_MAX_SIZE = 512_000; // skip large sessions on shutdown
 const AUTO_SUMMARY_TIMEOUT = 15_000;
 
-// ─── Extension ───────────────────────────────────────────────────────────────
-
 export default function (pi: ExtensionAPI) {
-	// ── State ──
 	let cache: MemoryCache | null = null;
 	let sessionDir: string | null = null;
 	let cwd = "";
 	let memoryInjected = false;
 	let currentSessionFile: string | undefined;
 
-	// ── Helpers ──
-
-	/** Minimal session manager shape for state initialization. */
 	interface SessionManagerRef {
 		getSessionFile?: () => string | undefined;
 	}
 
-	function ensureState(ctx: { sessionManager: SessionManagerRef; cwd: string }) {
+	function ensureState(ctx: {
+		sessionManager: SessionManagerRef;
+		cwd: string;
+	}) {
 		if (!sessionDir) {
 			sessionDir = resolveSessionDir(
 				ctx.sessionManager.getSessionFile?.() ?? undefined,
@@ -119,7 +87,6 @@ export default function (pi: ExtensionAPI) {
 		if (!cache) cache = loadCache(ctx.cwd);
 	}
 
-	/** Format model provider/id as a label string. */
 	function modelLabel(model: unknown): string | null {
 		if (!model || typeof model !== "object") return null;
 		const m = model as ModelRef;
@@ -137,8 +104,8 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	/**
-	 * Resolve session directory, file list, and cache for a target path.
-	 * When path differs from cwd, loads the external project's cache.
+	 * Resolve session dir, file list, and cache for a target path.
+	 * When path differs from cwd, loads that project's cache separately.
 	 */
 	function resolveContext(
 		path?: string,
@@ -163,10 +130,6 @@ export default function (pi: ExtensionAPI) {
 		};
 	}
 
-	/**
-	 * Ensure a session is in a cache with current metadata.
-	 * Returns the cached entry or null if the file can't be parsed.
-	 */
 	function ensureCached(
 		file: string,
 		targetCache?: MemoryCache,
@@ -179,15 +142,13 @@ export default function (pi: ExtensionAPI) {
 		try {
 			size = statSync(file).size;
 		} catch {
-			return null; // file deleted or inaccessible
+			return null;
 		}
 
-		// Return cached if file hasn't changed
 		if (c.sessions[fn] && c.sessions[fn].fileSize === size) {
 			return c.sessions[fn];
 		}
 
-		// (Re)scan
 		const info = scanSession(file);
 		if (!info) return null;
 
@@ -242,7 +203,6 @@ export default function (pi: ExtensionAPI) {
 			},
 		);
 
-		// Don't cache aborted or empty responses
 		if (response.stopReason === "aborted") return null;
 
 		const text = response.content
@@ -256,8 +216,6 @@ export default function (pi: ExtensionAPI) {
 		return text || null;
 	}
 
-	// ── session_start: load cache ──
-
 	pi.on("session_start", async (_event, ctx) => {
 		cwd = ctx.cwd;
 		memoryInjected = false;
@@ -267,19 +225,14 @@ export default function (pi: ExtensionAPI) {
 		cache = loadCache(cwd);
 	});
 
-	// ── session_shutdown: auto-summarize outgoing session ──
-
+	// Auto-summarize outgoing session (skips reload, large files, short sessions)
 	pi.on("session_shutdown", async (event, ctx) => {
-		// Don't summarize on reload (session continues)
 		if (event.reason === "reload") return;
 		if (!currentSessionFile || !cache) return;
 
 		const fn = basename(currentSessionFile);
-
-		// Skip if already summarized
 		if (cache.sessions[fn]?.summary) return;
 
-		// Skip large sessions – use /memory-update instead
 		let size: number;
 		try {
 			size = statSync(currentSessionFile).size;
@@ -288,11 +241,9 @@ export default function (pi: ExtensionAPI) {
 		}
 		if (size > AUTO_SUMMARY_MAX_SIZE) return;
 
-		// Check if session has enough content to summarize
 		const meta = scanSession(currentSessionFile);
 		if (!meta || meta.messageCount < AUTO_SUMMARY_MIN_MESSAGES) return;
 
-		// Use AbortController with timeout to avoid blocking shutdown
 		const controller = new AbortController();
 		const timeout = setTimeout(
 			() => controller.abort(),
@@ -311,17 +262,15 @@ export default function (pi: ExtensionAPI) {
 			const entry = cache.sessions[fn];
 			if (entry) {
 				entry.summary = summary;
-					entry.summaryModel = modelLabel(ctx.model);
+				entry.summaryModel = modelLabel(ctx.model);
 				saveCache(cache);
 			}
 		} catch {
-			// Don't block shutdown on errors
+			// don't block shutdown
 		} finally {
 			clearTimeout(timeout);
 		}
 	});
-
-	// ── before_agent_start: inject project memory on first prompt ──
 
 	pi.on("before_agent_start", async (_event, ctx) => {
 		if (memoryInjected) return;
@@ -333,9 +282,8 @@ export default function (pi: ExtensionAPI) {
 		const files = excludeCurrent(getSessionFiles());
 		if (files.length === 0) return;
 
-		// Use cached project memory if available
 		if (cache?.projectMemory) {
-			// ── Stale detection ──
+			// Check staleness
 			const memoryAge = cache.projectMemoryDate
 				? (Date.now() -
 						new Date(cache.projectMemoryDate).getTime()) /
@@ -378,7 +326,7 @@ export default function (pi: ExtensionAPI) {
 			};
 		}
 
-		// No project memory yet – build a lightweight session list from metadata
+		// No project memory yet – lightweight session list from metadata
 		const entries: Array<{
 			date: string;
 			label: string;
@@ -428,8 +376,6 @@ export default function (pi: ExtensionAPI) {
 			},
 		};
 	});
-
-	// ── Tool: list_sessions ──
 
 	pi.registerTool({
 		name: "list_sessions",
@@ -495,8 +441,6 @@ export default function (pi: ExtensionAPI) {
 			};
 		},
 	});
-
-	// ── Tool: search_sessions ──
 
 	pi.registerTool({
 		name: "search_sessions",
@@ -573,8 +517,6 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
-	// ── Tool: get_session_summary ──
-
 	pi.registerTool({
 		name: "get_session_summary",
 		label: "Get Session Summary",
@@ -621,7 +563,6 @@ export default function (pi: ExtensionAPI) {
 				};
 			}
 
-			// Return cached summary if available and file unchanged
 			const cached = ensureCached(file, rc.targetCache);
 			if (cached?.summary) {
 				return {
@@ -630,7 +571,6 @@ export default function (pi: ExtensionAPI) {
 				};
 			}
 
-			// Generate summary
 			onUpdate?.({
 				content: [{ type: "text", text: "Generating summary…" }],
 			});
@@ -652,7 +592,6 @@ export default function (pi: ExtensionAPI) {
 				};
 			}
 
-			// Cache it
 			if (cached) {
 				cached.summary = summary;
 				cached.summaryModel = modelLabel(ctx.model);
@@ -661,15 +600,10 @@ export default function (pi: ExtensionAPI) {
 
 			return {
 				content: [{ type: "text", text: summary }],
-				details: {
-					cached: false,
-					model: modelLabel(ctx.model),
-				},
+				details: { cached: false, model: modelLabel(ctx.model) },
 			};
 		},
 	});
-
-	// ── Command: /memory-update ──
 
 	pi.registerCommand("memory-update", {
 		description:
@@ -716,7 +650,6 @@ export default function (pi: ExtensionAPI) {
 				return;
 			}
 
-			// Find sessions needing summaries
 			const toProcess: string[] = [];
 			for (const f of files) {
 				const entry = ensureCached(f);
@@ -726,7 +659,7 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			if (argLimit && argLimit > 0) {
-				toProcess.splice(argLimit); // keep only first N (newest)
+				toProcess.splice(argLimit);
 			}
 
 			if (toProcess.length === 0) {
@@ -736,7 +669,6 @@ export default function (pi: ExtensionAPI) {
 						"info",
 					);
 			} else {
-				// Confirm
 				if (ctx.hasUI) {
 					const ok = await ctx.ui.confirm(
 						"Generate Summaries",
@@ -745,7 +677,6 @@ export default function (pi: ExtensionAPI) {
 					if (!ok) return;
 				}
 
-				// Batch processor – shared between TUI and non-TUI paths
 				const processBatch = async (
 					signal?: AbortSignal,
 				): Promise<number> => {
@@ -778,13 +709,12 @@ export default function (pi: ExtensionAPI) {
 				let generated: number;
 
 				if (ctx.mode === "tui") {
-					// TUI: run inside loader with Esc-to-cancel support
 					const result = await ctx.ui.custom<number | null>(
 						(tui, theme, _kb, done) => {
 							const loader = new BorderedLoader(
 								tui,
 								theme,
-								`📚 Generating ${toProcess.length} summaries… (Esc to cancel)`,
+								`Generating ${toProcess.length} summaries… (Esc to cancel)`,
 							);
 							loader.onAbort = () => done(null);
 							processBatch(loader.signal)
@@ -795,7 +725,6 @@ export default function (pi: ExtensionAPI) {
 					);
 					generated = result ?? 0;
 				} else {
-					// Non-TUI: run without abort capability
 					generated = await processBatch();
 				}
 
@@ -807,7 +736,6 @@ export default function (pi: ExtensionAPI) {
 				}
 			}
 
-			// Build project memory
 			if (cache) {
 				cache.projectMemory = buildProjectMemory(cache);
 				cache.projectMemoryDate = new Date().toISOString();
@@ -816,12 +744,10 @@ export default function (pi: ExtensionAPI) {
 
 			if (ctx.hasUI) {
 				ctx.ui.setStatus("session-memory", "");
-				ctx.ui.notify("✅ Project memory updated.", "info");
+				ctx.ui.notify("Project memory updated.", "info");
 			}
 		},
 	});
-
-	// ── Command: /memory-status ──
 
 	pi.registerCommand("memory-status", {
 		description: "Show session memory cache statistics",
@@ -834,14 +760,14 @@ export default function (pi: ExtensionAPI) {
 				: 0;
 
 			const lines = [
-				`📚 Session Memory Status`,
-				`   Directory: ${cwd}`,
-				`   Sessions found: ${files.length}`,
-				`   Cached entries: ${cache ? Object.keys(cache.sessions).length : 0}`,
-				`   With summaries: ${withSummary}`,
-				`   Project memory: ${cache?.projectMemory ? "✅ built" : "❌ not built"}`,
+				"Session Memory Status",
+				`  Directory: ${cwd}`,
+				`  Sessions found: ${files.length}`,
+				`  Cached entries: ${cache ? Object.keys(cache.sessions).length : 0}`,
+				`  With summaries: ${withSummary}`,
+				`  Project memory: ${cache?.projectMemory ? "yes" : "no"}`,
 				cache?.projectMemoryDate
-					? `   Last updated: ${cache.projectMemoryDate.slice(0, 10)}`
+					? `  Last updated: ${cache.projectMemoryDate.slice(0, 10)}`
 					: "",
 			].filter(Boolean);
 
@@ -850,8 +776,6 @@ export default function (pi: ExtensionAPI) {
 			}
 		},
 	});
-
-	// ── Command: /memory-clear ──
 
 	pi.registerCommand("memory-clear", {
 		description:
