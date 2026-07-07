@@ -1,0 +1,20 @@
+{
+  "name": "pi-session-memory",
+  "version": "0.1.0",
+  "description": "Pi extension that gives the agent access to knowledge from previous sessions – auto-injected project memory, full-text search, LLM-generated summaries, and cross-project session access.",
+  "keywords": ["pi-package"],
+  "license": "MIT",
+  "author": "Jens Köster",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jenskoestr/pi-session-memory.git"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "pi": {
+    "extensions": ["."]
+  }
+}
