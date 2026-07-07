@@ -347,11 +347,7 @@ export function buildProjectMemory(
 	];
 
 	for (const s of sessions) {
-		const d = new Date(s.date).toLocaleDateString("de-DE", {
-			year: "numeric",
-			month: "2-digit",
-			day: "2-digit",
-		});
+		const d = s.date.slice(0, 10);
 		const label = s.name || s.firstUserMessage?.slice(0, 60) || "unnamed";
 
 		// Take first ~150 chars of summary for the overview

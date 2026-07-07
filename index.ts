@@ -235,7 +235,7 @@ export default function (pi: ExtensionAPI) {
 			const cached = ensureCached(f);
 			if (cached && cached.messageCount > 0) {
 				entries.push({
-					date: new Date(cached.date).toLocaleDateString("de-DE"),
+					date: cached.date.slice(0, 10),
 					label: cached.name || cached.firstUserMessage?.slice(0, 80) || "(empty)",
 					msgs: cached.messageCount,
 				});
