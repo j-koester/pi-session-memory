@@ -104,7 +104,12 @@ export default function (pi: ExtensionAPI) {
 
 	// ── Helpers ──
 
-	function ensureState(ctx: { sessionManager: any; cwd: string }) {
+	/** Minimal session manager shape for state initialization. */
+	interface SessionManagerRef {
+		getSessionFile?: () => string | undefined;
+	}
+
+	function ensureState(ctx: { sessionManager: SessionManagerRef; cwd: string }) {
 		if (!sessionDir) {
 			sessionDir = resolveSessionDir(
 				ctx.sessionManager.getSessionFile?.() ?? undefined,
@@ -112,6 +117,13 @@ export default function (pi: ExtensionAPI) {
 			);
 		}
 		if (!cache) cache = loadCache(ctx.cwd);
+	}
+
+	/** Format model provider/id as a label string. */
+	function modelLabel(model: unknown): string | null {
+		if (!model || typeof model !== "object") return null;
+		const m = model as ModelRef;
+		return m.provider && m.id ? `${m.provider}/${m.id}` : null;
 	}
 
 	function getSessionFiles(): string[] {
@@ -130,7 +142,7 @@ export default function (pi: ExtensionAPI) {
 	 */
 	function resolveContext(
 		path?: string,
-		ctx?: { sessionManager: any; cwd: string },
+		ctx?: { sessionManager: SessionManagerRef; cwd: string },
 	) {
 		if (path && path !== cwd) {
 			const dir = resolveSessionDir(undefined, path);
@@ -299,9 +311,7 @@ export default function (pi: ExtensionAPI) {
 			const entry = cache.sessions[fn];
 			if (entry) {
 				entry.summary = summary;
-				entry.summaryModel = ctx.model
-					? `${(ctx.model as ModelRef).provider}/${(ctx.model as ModelRef).id}`
-					: null;
+					entry.summaryModel = modelLabel(ctx.model);
 				saveCache(cache);
 			}
 		} catch {
@@ -645,9 +655,7 @@ export default function (pi: ExtensionAPI) {
 			// Cache it
 			if (cached) {
 				cached.summary = summary;
-				cached.summaryModel = ctx.model
-					? `${(ctx.model as ModelRef).provider}/${(ctx.model as ModelRef).id}`
-					: null;
+				cached.summaryModel = modelLabel(ctx.model);
 				saveCache(rc.targetCache);
 			}
 
@@ -655,9 +663,7 @@ export default function (pi: ExtensionAPI) {
 				content: [{ type: "text", text: summary }],
 				details: {
 					cached: false,
-					model: ctx.model
-						? `${(ctx.model as ModelRef).provider}/${(ctx.model as ModelRef).id}`
-						: null,
+					model: modelLabel(ctx.model),
 				},
 			};
 		},
@@ -757,7 +763,7 @@ export default function (pi: ExtensionAPI) {
 								const entry = cache.sessions[fn];
 								if (entry) {
 									entry.summary = summary;
-									entry.summaryModel = `${ctx.model!.provider}/${ctx.model!.id}`;
+									entry.summaryModel = modelLabel(ctx.model);
 								}
 								completed++;
 								saveCache(cache);

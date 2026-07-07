@@ -10,7 +10,6 @@ import {
 	existsSync,
 	mkdirSync,
 	readdirSync,
-	statSync,
 } from "node:fs";
 import { join, basename, dirname } from "node:path";
 import { createHash } from "node:crypto";
