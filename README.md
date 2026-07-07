@@ -17,13 +17,13 @@ Sessions are auto-summarized on shutdown (if short enough). For larger histories
 ## Install
 
 ```bash
-pi install git:github.com/jenskoestr/pi-session-memory
+pi install git:github.com/j-koester/pi-session-memory
 ```
 
 Or clone manually:
 
 ```bash
-git clone https://github.com/jenskoestr/pi-session-memory.git ~/.pi/agent/extensions/pi-session-memory
+git clone https://github.com/j-koester/pi-session-memory.git ~/.pi/agent/extensions/pi-session-memory
 ```
 
 ## Commands
