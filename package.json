@@ -7,7 +7,7 @@
   "author": "Jens Köster",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jenskoestr/pi-session-memory.git"
+    "url": "https://github.com/j-koester/pi-session-memory.git"
   },
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",
