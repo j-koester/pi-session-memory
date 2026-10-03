@@ -1,5 +1,9 @@
 # pi-session-memory
 
+[![GitHub release](https://img.shields.io/github/v/release/j-koester/pi-session-memory?include_prereleases)](https://github.com/j-koester/pi-session-memory/releases)
+[![pi compatible](https://img.shields.io/badge/pi-v1.0%2B%20compatible-brightgreen)](https://pi.dev)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 A [pi](https://pi.dev) extension that gives the agent persistent memory across sessions. Automatically injects context from previous sessions and lets the LLM search through past work.
 
 ## What it does
@@ -25,6 +29,8 @@ Or clone manually:
 ```bash
 git clone https://github.com/j-koester/pi-session-memory.git ~/.pi/agent/extensions/pi-session-memory
 ```
+
+**Compatibility:** Tested with pi v1.0.0. No breaking API usage; uses `registerTool`, `registerCommand`, and the `session_start` / `session_shutdown` / `before_agent_start` events, all stable in the 1.0 extension API.
 
 ## Commands
 
