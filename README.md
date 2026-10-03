@@ -1,5 +1,6 @@
 # pi-session-memory
 
+[![npm](https://img.shields.io/npm/v/@netzlabor/pi-session-memory)](https://www.npmjs.com/package/@netzlabor/pi-session-memory)
 [![GitHub release](https://img.shields.io/github/v/release/j-koester/pi-session-memory?include_prereleases)](https://github.com/j-koester/pi-session-memory/releases)
 [![pi compatible](https://img.shields.io/badge/pi-v1.0%2B%20compatible-brightgreen)](https://pi.dev)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -20,8 +21,16 @@ Sessions are auto-summarized on shutdown (if short enough). For larger histories
 
 ## Install
 
+From npm (recommended):
+
 ```bash
-pi install git:github.com/j-koester/pi-session-memory
+pi install npm:@netzlabor/pi-session-memory
+```
+
+Or directly from GitHub:
+
+```bash
+pi install git:github.com/j-koester/pi-session-memory@v0.1.1
 ```
 
 Or clone manually:

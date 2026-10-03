@@ -1,6 +1,16 @@
 {
-  "name": "pi-session-memory",
+  "name": "@netzlabor/pi-session-memory",
   "version": "0.1.1",
+  "files": [
+    "index.ts",
+    "utils.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "description": "Pi extension that gives the agent access to knowledge from previous sessions – auto-injected project memory, full-text search, LLM-generated summaries, and cross-project session access.",
   "keywords": ["pi-package"],
   "license": "MIT",
